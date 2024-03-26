@@ -6,4 +6,17 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-opencv = "0.84.5"
+actix-web = "4"
+log = "0.4"
+env_logger = "0.9"
+futures = "0.3"
+tokio = "1"
+
+image = "0.24"
+structopt = "0.3"
+
+[target.'cfg(target_os="windows")'.dependencies]
+escapi = "4.0"
+
+[target.'cfg(not(target_os="macos"))'.dependencies]
+opencv = '0.89.0'

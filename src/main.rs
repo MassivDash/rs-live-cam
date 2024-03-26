@@ -1,59 +1,62 @@
-use opencv::{
-    core::{Mat, Vector},
-    imgcodecs,
-    prelude::*,
-    videoio,
-};
+use structopt::StructOpt;
 
-use std::io::Write;
-use std::net::TcpListener;
+use actix_web::web::Data;
+use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 
-fn main() {
-    let listener = TcpListener::bind("192.168.0.129:8000").unwrap();
-    println!("Server listening on port 8080");
+#[macro_use]
+extern crate log;
 
-    let mut cam =
-        videoio::VideoCapture::new(0, videoio::CAP_ANY).expect("Failed to get video capture");
-    let mut frame = Mat::default();
-    let mut buf = Vector::new();
+use std::sync::Mutex;
 
-    loop {
-        let (mut stream, _) = listener.accept().expect("Failed to accept connection");
+mod broadcaster;
+use broadcaster::Broadcaster;
 
-        cam.read(&mut frame).expect("Failed to capture frame");
-        buf.clear();
-        let _ = imgcodecs::imencode(".jpg", &frame, &mut buf, &Vector::new());
+#[derive(Debug, StructOpt)]
+#[structopt(name = "mjpeg-rs")]
+struct Opt {
+    #[structopt(short, long, default_value = "320")]
+    width: u32,
 
-        let response = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=frame\r\n\r\n"
-        );
+    #[structopt(short, long, default_value = "180")]
+    height: u32,
 
-        if stream.write_all(response.as_bytes()).is_err() {
-            continue;
-        }
+    #[structopt(short, long, default_value = "30")]
+    fps: u64,
+}
 
-        loop {
-            cam.read(&mut frame).expect("Failed to capture frame");
-            buf.clear();
-            let _ = imgcodecs::imencode(".jpg", &frame, &mut buf, &Vector::new());
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    env_logger::init();
 
-            let image_data = format!(
-                "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\n\r\n",
-                buf.len()
-            );
+    let opt = Opt::from_args();
 
-            if stream.write_all(image_data.as_bytes()).is_err() {
-                break;
-            }
-            if stream.write_all(buf.as_slice()).is_err() {
-                break;
-            }
-            if stream.write_all(b"\r\n").is_err() {
-                break;
-            }
-            if stream.flush().is_err() {
-                break;
-            }
-        }
-    }
+    info!("{:?}", opt);
+
+    let data = Broadcaster::create(opt.width, opt.height, opt.fps);
+
+    HttpServer::new(move || {
+        App::new()
+            .app_data(data.clone())
+            .route("/", web::get().to(new_client))
+    })
+    .bind("0.0.0.0:8000")?
+    .run()
+    .await
+}
+
+/// Register a new client and return a response
+async fn new_client(broadcaster: Data<Mutex<Broadcaster>>) -> impl Responder {
+    info!("new_client...");
+    let rx = broadcaster.lock().unwrap().new_client();
+
+    HttpResponse::Ok()
+        .append_header(("Cache-Control", "no-store, must-revalidate"))
+        .append_header(("Pragma", "no-cache"))
+        .append_header(("Expires", "0"))
+        .append_header(("Connection", "close"))
+        .append_header((
+            "Content-Type",
+            "multipart/x-mixed-replace;boundary=boundarydonotcross",
+        ))
+        .streaming(rx) // now starts streaming
 }
