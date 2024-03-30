@@ -24,5 +24,5 @@ structopt = "0.3"
 [target.'cfg(target_os="windows")'.dependencies]
 escapi = "4.0"
 
-[target.'cfg(not(target_os="macos"))'.dependencies]
+[target.'cfg(not(target_os="windows"))'.dependencies]
 opencv = '0.89.0'

@@ -2,7 +2,6 @@ use actix_session::{storage::CookieSessionStore, Session, SessionMiddleware};
 use actix_web::cookie::{Key, SameSite};
 use actix_web::error::InternalError;
 use actix_web::http::Error;
-use actix_web::web::Data;
 use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer, Responder, ResponseError};
 use actix_web_flash_messages::storage::CookieMessageStore;
 use actix_web_flash_messages::FlashMessagesFramework;
@@ -10,8 +9,6 @@ use structopt::StructOpt;
 
 #[macro_use]
 extern crate log;
-
-use std::sync::Mutex;
 
 mod broadcaster;
 mod routes;
@@ -71,12 +68,10 @@ async fn index(req: HttpRequest, session: Session) -> Result<impl Responder, Err
 async fn main() -> std::io::Result<()> {
     env_logger::init();
 
-    let opt = Opt::from_args();
 
-    info!("{:?}", opt);
     let secret_key =
         Key::from(b"0123456789012345678901234567890123456789012345678901234567890123456789");
-    let data = Broadcaster::create(opt.width, opt.height, opt.fps);
+
     let message_store = CookieMessageStore::builder(secret_key.clone()).build();
     let message_framework = FlashMessagesFramework::builder(message_store).build();
 
@@ -85,7 +80,6 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         let cors = get_cors_options("dev".to_string());
         App::new()
-            .app_data(data.clone())
             .wrap(cors)
             .wrap(session_middleware()) // allow the cookie to be accessed from javascript
             .wrap(message_framework.clone())
@@ -101,19 +95,19 @@ async fn main() -> std::io::Result<()> {
 
 /// Register a new client and return a response
 async fn new_client(
-    req: HttpRequest,
     session: Session,
-    broadcaster: Data<Mutex<Broadcaster>>,
 ) -> impl Responder {
     info!("new_client...");
-    println!("{req:?}");
 
     println!("session main new_client: {:?}", session.entries());
     let auth = validate_session(&session).map_err(|err| InternalError::from_response("", err));
 
     match auth {
         Ok(_) => {
-            let rx = broadcaster.lock().unwrap().new_client();
+            let opt = Opt::from_args();
+            let data = Broadcaster::create(opt.width, opt.height, opt.fps);
+
+            let rx = data.lock().unwrap().new_client();
             // now starts streaming
 
             HttpResponse::Ok()

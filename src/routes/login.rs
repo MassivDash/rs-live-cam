@@ -66,13 +66,12 @@ pub async fn login(
 
     match User::authenticate(credentials) {
         Ok(user) => {
-            println!("user: {:?}", user);
 
             session.renew();
             session
                 .insert("user_id", user.id)
                 .map_err(|e| login_redirect(LoginError::UnexpectedError(e.into())))?;
-            println!("session: {:?}", session.entries());
+
             Ok(HttpResponse::SeeOther()
                 .insert_header((LOCATION, "/"))
                 .finish())

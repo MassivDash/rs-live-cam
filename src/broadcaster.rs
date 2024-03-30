@@ -12,13 +12,11 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 #[cfg(target_os = "windows")]
 use image::{codecs::jpeg::JpegEncoder, ColorType};
 #[cfg(not(target_os = "windows"))]
-use opencv::prelude::MatTraitConst;
-#[cfg(not(target_os = "windows"))]
-use opencv::prelude::VideoCaptureTrait;
-#[cfg(not(target_os = "windows"))]
-use opencv::prelude::VideoCaptureTraitConst;
-#[cfg(not(target_os = "windows"))]
-use opencv::{self, videoio};
+use opencv::{
+    self,
+    prelude::{MatTraitConst, VideoCaptureTrait, VideoCaptureTraitConst},
+    videoio,
+};
 
 /// Hold clients channels
 pub struct Broadcaster {
@@ -110,9 +108,15 @@ impl Broadcaster {
     }
 
     #[cfg(not(target_os = "windows"))]
-    fn spawn_capture(me: Data<Mutex<Self>>, width: u32, height: u32, fps: u64) {
+    fn spawn_capture(
+        me: Data<Mutex<Self>>,
+        width: u32,
+        height: u32,
+        fps: u64,
+    ) -> std::thread::JoinHandle<()> {
         let mut cam = videoio::VideoCapture::new(0, videoio::CAP_ANY).unwrap(); // 0 is the default camera
-        let opened = true;
+       
+        let opened = videoio::VideoCapture::is_opened(&cam).unwrap();
 
         cam.set(videoio::CAP_PROP_FRAME_WIDTH, width as f64)
             .unwrap();
@@ -127,27 +131,30 @@ impl Broadcaster {
             cam.get(videoio::CAP_PROP_FPS).unwrap()
         );
 
-        std::thread::spawn(move || loop {
+        std::thread::spawn(move || {
             if !opened {
                 panic!("Unable to open default camera!");
             }
             let mut mat_frame = opencv::core::Mat::default();
-            cam.read(&mut mat_frame).unwrap();
-            let mut frame = unsafe {
-                Vec::from(std::slice::from_raw_parts(
-                    mat_frame.data(),
-                    (width * height * 3) as usize,
-                ))
-            };
+            loop {
+                
+                cam.read(&mut mat_frame).unwrap();
+                let mut frame = unsafe {
+                    Vec::from(std::slice::from_raw_parts(
+                        mat_frame.data(),
+                        (width * height * 3) as usize,
+                    ))
+                };
 
-            // Lets' convert from BGR to RGB.
-            for i in 0..(width * height) {
-                frame.swap((i * 3) as usize, (i * 3 + 2) as usize);
+                // Lets' convert from BGR to RGB.
+                for i in 0..(width * height) {
+                    frame.swap((i * 3) as usize, (i * 3 + 2) as usize);
+                }
+
+                let msg = Broadcaster::make_message_block(&frame, width, height);
+                me.lock().unwrap().send_image(&msg);
             }
-
-            let msg = Broadcaster::make_message_block(&frame, width, height);
-            me.lock().unwrap().send_image(&msg);
-        });
+        })
     }
 }
 
