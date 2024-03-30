@@ -1,14 +1,18 @@
 use actix_session::Session;
 use actix_web::HttpResponse;
 use serde::{Deserialize, Serialize};
+use std::env;
+extern crate dotenv;
 
-#[derive(Deserialize)]
+use dotenv::dotenv;
+
+#[derive(Deserialize, PartialEq, Eq, Debug)]
 pub struct Credentials {
     pub username: String,
     pub password: String,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, PartialEq, Eq)]
 pub struct User {
     pub id: i64,
     username: String,
@@ -25,8 +29,21 @@ pub enum AuthError {
 
 impl User {
     pub fn authenticate(credentials: Credentials) -> Result<Self, AuthError> {
-        // to do: figure out why I keep getting hacked      /s
-        if &credentials.password != "hunter2" {
+
+
+        dotenv().ok();
+
+        let password = env::var("PASSWORD").expect("PASSWORD must be set");
+        let username = env::var("USERNAME").expect("USERNAME must be set");
+
+        if *credentials.username != username {
+            return Err(AuthError::InvalidCredentials(anyhow::anyhow!(
+                "Invalid credentials."
+            )));
+        }
+        
+        
+        if *credentials.password != password {
             return Err(AuthError::InvalidCredentials(anyhow::anyhow!(
                 "Invalid credentials."
             )));

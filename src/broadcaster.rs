@@ -6,7 +6,7 @@ use actix_web::web::{Bytes, Data};
 use actix_web::Error;
 use futures::Stream;
 use image::codecs::jpeg::JpegEncoder;
-use image::ColorType;
+use image::ExtendedColorType;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 #[cfg(target_os = "windows")]
@@ -50,7 +50,7 @@ impl Broadcaster {
         let mut buffer = Vec::new();
         let mut encoder = JpegEncoder::new(&mut buffer);
         encoder
-            .encode(frame, width, height, ColorType::Rgb8)
+            .encode(frame, width, height, ExtendedColorType::Rgb8)
             .unwrap();
 
         let mut msg = format!(
